@@ -19,17 +19,16 @@
 
       <v-divider />
 
-      <v-list nav class="px-3">
-        <v-list-item
-            v-for="item in itensMenu"
-            :key="item.title"
-            :to="item.to"
-            :prepend-icon="item.icon"
-            :title="item.title"
-            color="primary"
-            rounded="lg"
-        />
-      </v-list>
+      <v-list-item
+          v-for="item in itensMenu"
+          :key="item.title"
+          :to="item.to"
+          :prepend-icon="item.icon"
+          :title="item.title"
+          :exact="item.to === '/'"
+          color="primary"
+          rounded="lg"
+      />
 
       <template #append>
         <div v-if="exibirConfiguracoes" class="pa-3">

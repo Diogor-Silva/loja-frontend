@@ -5,6 +5,7 @@ import { createVuetify } from "vuetify";
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 import { aliases, mdi } from "vuetify/iconsets/mdi";
+import { pt } from "vuetify/locale";
 
 const vuetify = createVuetify({
     components,
@@ -15,6 +16,14 @@ const vuetify = createVuetify({
         aliases,
         sets: {
             mdi,
+        },
+    },
+
+    locale: {
+        locale: "pt",
+        fallback: "pt",
+        messages: {
+            pt,
         },
     },
 
