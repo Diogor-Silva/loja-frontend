@@ -8,6 +8,10 @@ const caixaService = {
     listar() {
         return api.get("/caixas");
     },
+
+    buscarResumoDashboard() {
+        return api.get("/caixas/resumo-dashboard");
+    },
 };
 
 export default caixaService;
