@@ -1,10 +1,14 @@
-import { createRouter, createWebHistory } from "vue-router";
+import {
+  createRouter,
+  createWebHistory,
+} from "vue-router";
 
 import MainLayout from "@/layouts/MainLayout.vue";
 import HomeView from "@/views/home/HomeView.vue";
 import ClienteView from "@/views/clientes/ClienteListView.vue";
 import ProdutoView from "@/views/produtos/ProdutoListView.vue";
 import CaixaView from "@/views/caixa/CaixaView.vue";
+import VendaView from "@/views/vendas/VendaListView.vue";
 import UsuarioView from "@/views/configuracoes/UsuarioView.vue";
 import PerfilView from "@/views/configuracoes/PerfilView.vue";
 
@@ -43,6 +47,14 @@ const routes = [
         component: CaixaView,
         meta: {
           title: "Caixa",
+        },
+      },
+      {
+        path: "vendas",
+        name: "vendas",
+        component: VendaView,
+        meta: {
+          title: "Vendas",
         },
       },
       {

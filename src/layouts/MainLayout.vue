@@ -12,26 +12,36 @@
         </v-icon>
 
         <div class="ml-3">
-          <div class="logo-title">Loja Tech</div>
-          <div class="logo-subtitle">Sistema de gestão</div>
+          <div class="logo-title">
+            Loja Tech
+          </div>
+
+          <div class="logo-subtitle">
+            Sistema de gestão
+          </div>
         </div>
       </div>
 
       <v-divider />
 
-      <v-list-item
-          v-for="item in itensMenu"
-          :key="item.title"
-          :to="item.to"
-          :prepend-icon="item.icon"
-          :title="item.title"
-          :exact="item.to === '/'"
-          color="primary"
-          rounded="lg"
-      />
+      <v-list nav class="px-3">
+        <v-list-item
+            v-for="item in itensMenu"
+            :key="item.title"
+            :to="item.to"
+            :prepend-icon="item.icon"
+            :title="item.title"
+            :exact="item.to === '/'"
+            color="primary"
+            rounded="lg"
+        />
+      </v-list>
 
       <template #append>
-        <div v-if="exibirConfiguracoes" class="pa-3">
+        <div
+            v-if="exibirConfiguracoes"
+            class="pa-3"
+        >
           <v-divider class="mb-3" />
 
           <div class="menu-section-title">
@@ -60,7 +70,9 @@
     </v-navigation-drawer>
 
     <v-app-bar color="surface" elevation="1">
-      <v-app-bar-nav-icon @click="drawer = !drawer" />
+      <v-app-bar-nav-icon
+          @click="drawer = !drawer"
+      />
 
       <v-toolbar-title class="font-weight-bold">
         {{ tituloPagina }}
@@ -68,12 +80,18 @@
 
       <v-spacer />
 
-      <v-chip color="primary" variant="tonal" class="mr-4">
+      <v-chip
+          color="primary"
+          variant="tonal"
+          class="mr-4"
+      >
         {{ perfilUsuario }}
       </v-chip>
 
       <v-avatar color="primary" class="mr-4">
-        <v-icon color="white">mdi-account</v-icon>
+        <v-icon color="white">
+          mdi-account
+        </v-icon>
       </v-avatar>
     </v-app-bar>
 
@@ -116,6 +134,11 @@ export default {
           title: "Caixa",
           icon: "mdi-cash-register",
           to: "/caixa",
+        },
+        {
+          title: "Vendas",
+          icon: "mdi-receipt-text-outline",
+          to: "/vendas",
         },
       ],
     };
