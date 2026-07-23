@@ -48,17 +48,19 @@
           :headers="headers"
           :items="produtos"
           :search="pesquisa"
+          :loading="carregando"
+          loading-text="Carregando produtos..."
           item-value="id"
           hover
       >
-
         <template v-slot:[`item.codigoBarra`]="{ item }">
-  <span v-if="item.codigoBarra">
-    {{ item.codigoBarra }}
-  </span>
+          <span v-if="item.codigoBarra">
+            {{ item.codigoBarra }}
+          </span>
+
           <span v-else class="text-medium-emphasis">
-    Não informado
-  </span>
+            Não informado
+          </span>
         </template>
 
         <template v-slot:[`item.preco`]="{ item }">
@@ -95,6 +97,7 @@
                     variant="text"
                     color="primary"
                     size="small"
+                    :disabled="salvando || excluindo"
                     @click="editarProduto(item)"
                 />
               </template>
@@ -108,6 +111,7 @@
                     variant="text"
                     color="error"
                     size="small"
+                    :disabled="salvando || excluindo"
                     @click="confirmarExclusao(item)"
                 />
               </template>
@@ -139,6 +143,7 @@
           <v-btn
               icon="mdi-close"
               variant="text"
+              :disabled="salvando"
               @click="fecharCadastro"
           />
         </v-card-title>
@@ -154,6 +159,7 @@
                     label="Nome"
                     variant="outlined"
                     maxlength="120"
+                    :disabled="salvando"
                     :rules="[regras.obrigatorio, regras.nome]"
                 />
               </v-col>
@@ -169,6 +175,7 @@
                     maxlength="500"
                     counter="500"
                     auto-grow
+                    :disabled="salvando"
                 />
               </v-col>
             </v-row>
@@ -180,6 +187,7 @@
                     label="Categoria"
                     variant="outlined"
                     maxlength="80"
+                    :disabled="salvando"
                     :rules="[regras.obrigatorio]"
                 />
               </v-col>
@@ -190,6 +198,7 @@
                     label="Marca"
                     variant="outlined"
                     maxlength="80"
+                    :disabled="salvando"
                     :rules="[regras.obrigatorio]"
                 />
               </v-col>
@@ -201,6 +210,7 @@
                     variant="outlined"
                     inputmode="numeric"
                     maxlength="13"
+                    :disabled="salvando"
                     :rules="[regras.codigoBarra]"
                     @update:model-value="
                     form.codigoBarra = somenteNumeros($event, 13)
@@ -217,6 +227,7 @@
                     prefix="R$"
                     variant="outlined"
                     inputmode="decimal"
+                    :disabled="salvando"
                     :rules="[regras.obrigatorio, regras.preco]"
                     @update:model-value="
                     form.preco = formatarCampoPreco($event)
@@ -231,6 +242,7 @@
                     variant="outlined"
                     inputmode="numeric"
                     maxlength="6"
+                    :disabled="salvando"
                     :rules="[regras.obrigatorio, regras.estoque]"
                     @update:model-value="
                     form.quantidadeEstoque = somenteNumeros($event, 6)
@@ -248,6 +260,7 @@
 
           <v-btn
               variant="text"
+              :disabled="salvando"
               @click="fecharCadastro"
           >
             Cancelar
@@ -256,6 +269,8 @@
           <v-btn
               color="primary"
               rounded="lg"
+              :loading="salvando"
+              :disabled="salvando"
               @click="salvarProduto"
           >
             Salvar
@@ -267,6 +282,7 @@
     <v-dialog
         v-model="dialogExclusao"
         max-width="430"
+        persistent
     >
       <v-card rounded="lg">
         <v-card-title class="text-h5 font-weight-bold pa-6">
@@ -283,6 +299,7 @@
 
           <v-btn
               variant="text"
+              :disabled="excluindo"
               @click="fecharExclusao"
           >
             Cancelar
@@ -291,6 +308,8 @@
           <v-btn
               color="error"
               rounded="lg"
+              :loading="excluindo"
+              :disabled="excluindo"
               @click="excluirProduto"
           >
             Excluir
@@ -303,7 +322,7 @@
         v-model="snackbar.aberto"
         :color="snackbar.cor"
         location="top right"
-        :timeout="3500"
+        :timeout="4500"
     >
       {{ snackbar.mensagem }}
 
@@ -320,6 +339,8 @@
 </template>
 
 <script>
+import produtoService from "@/services/produtoService";
+
 export default {
   name: "ProdutoListView",
 
@@ -328,8 +349,13 @@ export default {
       pesquisa: "",
       dialogCadastro: false,
       dialogExclusao: false,
+
       produtoEmEdicao: false,
       produtoSelecionado: null,
+
+      carregando: false,
+      salvando: false,
+      excluindo: false,
 
       snackbar: {
         aberto: false,
@@ -378,28 +404,7 @@ export default {
         },
       ],
 
-      produtos: [
-        {
-          id: 1,
-          nome: "Memória RAM Kingston Fury 16GB",
-          descricao: "Memória DDR4 3200MHz",
-          categoria: "Memória RAM",
-          marca: "Kingston",
-          codigoBarra: "7891234567890",
-          preco: 279.9,
-          quantidadeEstoque: 12,
-        },
-        {
-          id: 2,
-          nome: "Mouse Gamer",
-          descricao: "Mouse óptico com iluminação RGB",
-          categoria: "Periféricos",
-          marca: "Logitech",
-          codigoBarra: "7899876543210",
-          preco: 149.9,
-          quantidadeEstoque: 3,
-        },
-      ],
+      produtos: [],
 
       form: {
         id: null,
@@ -454,52 +459,98 @@ export default {
           const estoque = Number(valor);
 
           return (
-              Number.isInteger(estoque) &&
-              estoque >= 0
-          ) || "Estoque deve ser zero ou maior";
+              (
+                  Number.isInteger(estoque) &&
+                  estoque >= 0
+              ) ||
+              "Estoque deve ser zero ou maior"
+          );
         },
       },
     };
   },
 
+  mounted() {
+    this.carregarProdutos();
+  },
+
   methods: {
+    async carregarProdutos() {
+      this.carregando = true;
+
+      try {
+        const resposta = await produtoService.listar();
+
+        this.produtos = Array.isArray(resposta.data)
+            ? resposta.data
+            : [];
+      } catch (erro) {
+        console.error("Erro ao carregar produtos:", erro);
+
+        this.produtos = [];
+
+        this.exibirMensagem(
+            this.obterMensagemErro(
+                erro,
+                "Não foi possível carregar os produtos."
+            ),
+            "error"
+        );
+      } finally {
+        this.carregando = false;
+      }
+    },
+
     abrirCadastro() {
       this.produtoEmEdicao = false;
+      this.produtoSelecionado = null;
       this.limparFormulario();
       this.dialogCadastro = true;
     },
 
     editarProduto(produto) {
       this.produtoEmEdicao = true;
+      this.produtoSelecionado = produto;
 
       this.form = {
         id: produto.id,
-        nome: produto.nome,
-        descricao: produto.descricao,
-        categoria: produto.categoria,
-        marca: produto.marca,
-        codigoBarra: produto.codigoBarra,
-        preco: String(produto.preco)
-            .replace(".", ","),
-        quantidadeEstoque: String(produto.quantidadeEstoque),
+        nome: produto.nome || "",
+        descricao: produto.descricao || "",
+        categoria: produto.categoria || "",
+        marca: produto.marca || "",
+        codigoBarra: produto.codigoBarra || "",
+        preco: this.converterPrecoParaCampo(produto.preco),
+        quantidadeEstoque: String(
+            produto.quantidadeEstoque ?? ""
+        ),
       };
 
       this.dialogCadastro = true;
     },
 
     fecharCadastro() {
+      if (this.salvando) {
+        return;
+      }
+
       this.dialogCadastro = false;
       this.produtoEmEdicao = false;
+      this.produtoSelecionado = null;
       this.limparFormulario();
 
-      if (this.$refs.formProduto) {
-        this.$refs.formProduto.resetValidation();
-      }
+      this.$nextTick(() => {
+        if (this.$refs.formProduto) {
+          this.$refs.formProduto.resetValidation();
+        }
+      });
     },
 
     async salvarProduto() {
-      const resultado =
-          await this.$refs.formProduto.validate();
+      if (!this.$refs.formProduto) {
+        return;
+      }
+
+      const resultado = await this.$refs.formProduto.validate();
 
       if (!resultado.valid) {
         this.exibirMensagem(
@@ -517,47 +568,58 @@ export default {
         return;
       }
 
-      const produto = {
-        id: this.form.id,
-        nome: this.form.nome.trim(),
-        descricao: this.form.descricao.trim(),
-        categoria: this.form.categoria.trim(),
-        marca: this.form.marca.trim(),
-        codigoBarra: this.form.codigoBarra,
-        preco: Number(
-            String(this.form.preco).replace(",", ".")
-        ),
-        quantidadeEstoque: Number(
-            this.form.quantidadeEstoque
-        ),
+      const produtoRequest = {
+        nome: String(this.form.nome || "").trim(),
+        descricao: String(this.form.descricao || "").trim(),
+        categoria: String(this.form.categoria || "").trim(),
+        marca: String(this.form.marca || "").trim(),
+        codigoBarra:
+            String(this.form.codigoBarra || "").trim() || null,
+        preco: this.converterPrecoParaNumero(this.form.preco),
+        quantidadeEstoque: Number(this.form.quantidadeEstoque),
       };
 
-      if (this.produtoEmEdicao) {
-        const indice = this.produtos.findIndex(
-            (item) => item.id === produto.id
-        );
+      this.salvando = true;
 
-        if (indice !== -1) {
-          this.produtos[indice] = produto;
+      try {
+        if (this.produtoEmEdicao && this.form.id) {
+          await produtoService.atualizar(
+              this.form.id,
+              produtoRequest
+          );
+
+          this.exibirMensagem(
+              "Produto atualizado com sucesso.",
+              "success"
+          );
+        } else {
+          await produtoService.salvar(produtoRequest);
+
+          this.exibirMensagem(
+              "Produto cadastrado com sucesso.",
+              "success"
+          );
         }
 
-        this.exibirMensagem(
-            "Produto atualizado com sucesso.",
-            "success"
-        );
-      } else {
-        this.produtos.push({
-          ...produto,
-          id: Date.now(),
-        });
+        this.dialogCadastro = false;
+        this.produtoEmEdicao = false;
+        this.produtoSelecionado = null;
+        this.limparFormulario();
+
+        await this.carregarProdutos();
+      } catch (erro) {
+        console.error("Erro ao salvar produto:", erro);
 
         this.exibirMensagem(
-            "Produto cadastrado com sucesso.",
-            "success"
+            this.obterMensagemErro(
+                erro,
+                "Não foi possível salvar o produto."
+            ),
+            "error"
         );
+      } finally {
+        this.salvando = false;
       }
-
-      this.fecharCadastro();
     },
 
     confirmarExclusao(produto) {
@@ -566,26 +628,48 @@ export default {
     },
 
     fecharExclusao() {
+      if (this.excluindo) {
+        return;
+      }
+
       this.dialogExclusao = false;
       this.produtoSelecionado = null;
     },
 
-    excluirProduto() {
-      if (!this.produtoSelecionado) {
+    async excluirProduto() {
+      if (!this.produtoSelecionado?.id) {
         return;
       }
 
-      this.produtos = this.produtos.filter(
-          (produto) =>
-              produto.id !== this.produtoSelecionado.id
-      );
+      this.excluindo = true;
 
-      this.fecharExclusao();
+      try {
+        await produtoService.excluir(
+            this.produtoSelecionado.id
+        );
 
-      this.exibirMensagem(
-          "Produto excluído com sucesso.",
-          "success"
-      );
+        this.dialogExclusao = false;
+        this.produtoSelecionado = null;
+
+        this.exibirMensagem(
+            "Produto excluído com sucesso.",
+            "success"
+        );
+
+        await this.carregarProdutos();
+      } catch (erro) {
+        console.error("Erro ao excluir produto:", erro);
+
+        this.exibirMensagem(
+            this.obterMensagemErro(
+                erro,
+                "Não foi possível excluir o produto."
+            ),
+            "error"
+        );
+      } finally {
+        this.excluindo = false;
+      }
     },
 
     limparFormulario() {
@@ -602,15 +686,23 @@ export default {
     },
 
     codigoBarraJaCadastrado(codigoBarra) {
-      const codigo = String(codigoBarra || "").trim();
+      const codigo = String(codigoBarra || "")
+          .replace(/\D/g, "")
+          .trim();
 
       if (!codigo) {
         return false;
       }
 
       return this.produtos.some((produto) => {
+        const codigoProduto = String(
+            produto.codigoBarra || ""
+        )
+            .replace(/\D/g, "")
+            .trim();
+
         return (
-            produto.codigoBarra === codigo &&
+            codigoProduto === codigo &&
             produto.id !== this.form.id
         );
       });
@@ -623,10 +715,38 @@ export default {
     },
 
     formatarCampoPreco(valor) {
-      return String(valor || "")
-          .replace(/[^\d,]/g, "")
-          .replace(/(,.*),/g, "$1")
-          .slice(0, 12);
+      let preco = String(valor ?? "")
+          .replace(/[^\d,]/g, "");
+
+      const primeiraVirgula = preco.indexOf(",");
+
+      if (primeiraVirgula !== -1) {
+        const parteInteira = preco.slice(0, primeiraVirgula);
+        const parteDecimal = preco
+            .slice(primeiraVirgula + 1)
+            .replace(/,/g, "")
+            .slice(0, 2);
+
+        preco = `${parteInteira},${parteDecimal}`;
+      }
+
+      return preco.slice(0, 12);
+    },
+
+    converterPrecoParaNumero(valor) {
+      const precoNormalizado = String(valor ?? "")
+          .replace(/\./g, "")
+          .replace(",", ".");
+
+      return Number(precoNormalizado);
+    },
+
+    converterPrecoParaCampo(valor) {
+      if (valor === null || valor === undefined) {
+        return "";
+      }
+
+      return Number(valor).toFixed(2).replace(".", ",");
     },
 
     formatarMoeda(valor) {
@@ -637,11 +757,13 @@ export default {
     },
 
     corEstoque(quantidade) {
-      if (quantidade === 0) {
+      const estoque = Number(quantidade);
+
+      if (estoque === 0) {
         return "error";
       }
 
-      if (quantidade <= 5) {
+      if (estoque <= 5) {
         return "warning";
       }
 
@@ -660,6 +782,38 @@ export default {
       }
 
       return "Disponível";
+    },
+
+    obterMensagemErro(erro, mensagemPadrao) {
+      const dados = erro?.response?.data;
+
+      if (typeof dados === "string" && dados.trim()) {
+        return dados;
+      }
+
+      if (dados?.mensagem) {
+        return dados.mensagem;
+      }
+
+      if (dados?.message) {
+        return dados.message;
+      }
+
+      if (dados?.detail) {
+        return dados.detail;
+      }
+
+      if (dados?.erro) {
+        return dados.erro;
+      }
+
+      if (dados?.errors && Array.isArray(dados.errors)) {
+        return dados.errors
+            .map((item) => item.mensagem || item.message || item)
+            .join(" ");
+      }
+
+      return mensagemPadrao;
     },
 
     exibirMensagem(mensagem, cor = "success") {

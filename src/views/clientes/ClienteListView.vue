@@ -63,6 +63,11 @@
           {{ formatarTelefone(item.telefone) }}
         </template>
 
+        <!-- Gênero -->
+        <template v-slot:[`item.genero`]="{ item }">
+          {{ obterDescricaoGenero(item.genero) }}
+        </template>
+
         <!-- Ações -->
         <template v-slot:[`item.acoes`]="{ item }">
           <div class="d-flex justify-center align-center ga-1">
@@ -105,7 +110,7 @@
     <!-- Modal de cadastro e edição -->
     <v-dialog
         v-model="dialogCadastro"
-        max-width="900"
+        max-width="1000"
         persistent
     >
       <v-card rounded="lg">
@@ -127,7 +132,7 @@
 
         <v-card-text class="pa-6">
           <v-form ref="formCliente">
-            <!-- Nome na linha inteira -->
+            <!-- Nome -->
             <v-row>
               <v-col cols="12">
                 <v-text-field
@@ -143,7 +148,7 @@
               </v-col>
             </v-row>
 
-            <!-- CPF, telefone e e-mail na mesma linha -->
+            <!-- CPF, telefone e e-mail -->
             <v-row>
               <v-col cols="12" md="3">
                 <v-text-field
@@ -196,6 +201,114 @@
                 />
               </v-col>
             </v-row>
+
+            <!-- Gênero -->
+            <v-row>
+              <v-col cols="12" md="5">
+                <v-select
+                    v-model="form.genero"
+                    :items="generos"
+                    item-title="descricao"
+                    item-value="valor"
+                    label="Gênero"
+                    variant="outlined"
+                    prepend-inner-icon="mdi-gender-male-female"
+                    :rules="[regras.obrigatorio]"
+                />
+              </v-col>
+            </v-row>
+
+            <div class="d-flex align-center ga-2 mt-2 mb-4">
+              <v-icon color="primary">
+                mdi-map-marker-outline
+              </v-icon>
+
+              <span class="text-h6 font-weight-bold">
+                Endereço
+              </span>
+            </div>
+
+            <!-- CEP, rua e número -->
+            <v-row>
+              <v-col cols="12" md="3">
+                <v-text-field
+                    :model-value="form.endereco.cep"
+                    label="CEP"
+                    variant="outlined"
+                    inputmode="numeric"
+                    maxlength="9"
+                    prepend-inner-icon="mdi-map-marker"
+                    :rules="[
+                    regras.obrigatorio,
+                    regras.cep
+                  ]"
+                    @update:model-value="
+                    form.endereco.cep = formatarCep($event)
+                  "
+                />
+              </v-col>
+
+              <v-col cols="12" md="7">
+                <v-text-field
+                    v-model.trim="form.endereco.rua"
+                    label="Rua"
+                    variant="outlined"
+                    maxlength="150"
+                    :rules="[regras.obrigatorio]"
+                />
+              </v-col>
+
+              <v-col cols="12" md="2">
+                <v-text-field
+                    v-model.trim="form.endereco.numero"
+                    label="Número"
+                    variant="outlined"
+                    maxlength="20"
+                    :rules="[regras.obrigatorio]"
+                />
+              </v-col>
+            </v-row>
+
+            <!-- Bairro, cidade e estado -->
+            <v-row>
+              <v-col cols="12" md="4">
+                <v-text-field
+                    v-model.trim="form.endereco.bairro"
+                    label="Bairro"
+                    variant="outlined"
+                    maxlength="100"
+                    :rules="[regras.obrigatorio]"
+                />
+              </v-col>
+
+              <v-col cols="12" md="5">
+                <v-text-field
+                    v-model.trim="form.endereco.cidade"
+                    label="Cidade"
+                    variant="outlined"
+                    maxlength="100"
+                    :rules="[regras.obrigatorio]"
+                />
+              </v-col>
+
+              <v-col cols="12" md="3">
+                <v-text-field
+                    :model-value="form.endereco.estado"
+                    label="Estado"
+                    placeholder="MG"
+                    variant="outlined"
+                    maxlength="2"
+                    :rules="[
+                    regras.obrigatorio,
+                    regras.estado
+                  ]"
+                    @update:model-value="
+                    form.endereco.estado =
+                      normalizarEstado($event)
+                  "
+                />
+              </v-col>
+            </v-row>
           </v-form>
         </v-card-text>
 
@@ -214,6 +327,8 @@
           <v-btn
               color="primary"
               rounded="lg"
+              :loading="salvando"
+              :disabled="salvando"
               @click="salvarCliente"
           >
             Salvar
@@ -258,6 +373,44 @@
       </v-card>
     </v-dialog>
 
+    <!-- Modal de erro -->
+    <v-dialog
+        v-model="dialogErro.aberto"
+        max-width="500"
+    >
+      <v-card rounded="lg">
+        <v-card-title class="d-flex align-center ga-3 pa-6">
+          <v-icon color="error" size="32">
+            mdi-alert-circle-outline
+          </v-icon>
+
+          <span class="text-h5 font-weight-bold">
+        Não foi possível concluir a operação
+      </span>
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-6 text-body-1">
+          {{ dialogErro.mensagem }}
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-6">
+          <v-spacer />
+
+          <v-btn
+              color="error"
+              variant="text"
+              @click="fecharDialogErro"
+          >
+            Fechar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Mensagem de sucesso ou erro -->
     <v-snackbar
         v-model="snackbar.aberto"
@@ -280,6 +433,8 @@
 </template>
 
 <script>
+import clienteService from "@/services/clienteService";
+
 export default {
   name: "ClienteListView",
 
@@ -288,14 +443,41 @@ export default {
       pesquisa: "",
       dialogCadastro: false,
       dialogExclusao: false,
+
+      dialogErro: {
+        aberto: false,
+        mensagem: "",
+      },
+
       clienteEmEdicao: false,
       clienteSelecionado: null,
+      carregando: false,
+      salvando: false,
 
       snackbar: {
         aberto: false,
         mensagem: "",
         cor: "success",
       },
+
+      generos: [
+        {
+          descricao: "Feminino",
+          valor: "FEMININO",
+        },
+        {
+          descricao: "Masculino",
+          valor: "MASCULINO",
+        },
+        {
+          descricao: "Outro",
+          valor: "OUTRO",
+        },
+        {
+          descricao: "Prefiro não informar",
+          valor: "NAO_INFORMADO",
+        },
+      ],
 
       headers: [
         {
@@ -315,6 +497,10 @@ export default {
           key: "email",
         },
         {
+          title: "Gênero",
+          key: "genero",
+        },
+        {
           title: "Ações",
           key: "acoes",
           sortable: false,
@@ -323,23 +509,7 @@ export default {
         },
       ],
 
-      // Dados temporários enquanto não ligamos ao backend
-      clientes: [
-        {
-          id: 1,
-          nome: "Maria Oliveira",
-          cpf: "52998224725",
-          telefone: "31988887777",
-          email: "mariaoliveira@email.com",
-        },
-        {
-          id: 2,
-          nome: "João da Silva",
-          cpf: "11144477735",
-          telefone: "31999998888",
-          email: "joao@email.com",
-        },
-      ],
+      clientes: [],
 
       form: {
         id: null,
@@ -347,6 +517,15 @@ export default {
         cpf: "",
         telefone: "",
         email: "",
+        genero: "",
+        endereco: {
+          cep: "",
+          rua: "",
+          numero: "",
+          bairro: "",
+          cidade: "",
+          estado: "",
+        },
       },
 
       regras: {
@@ -386,8 +565,31 @@ export default {
               "Informe um e-mail válido"
           );
         },
+
+        cep: (valor) => {
+          const numeros = String(valor || "")
+              .replace(/\D/g, "");
+
+          return (
+              numeros.length === 8 ||
+              "CEP deve possuir 8 números"
+          );
+        },
+
+        estado: (valor) => {
+          const estado = String(valor || "").trim();
+
+          return (
+              /^[A-Za-z]{2}$/.test(estado) ||
+              "Estado deve possuir 2 letras"
+          );
+        },
       },
     };
+  },
+
+  mounted() {
+    this.carregarClientes();
   },
 
   computed: {
@@ -408,10 +610,19 @@ export default {
 
       this.form = {
         id: cliente.id,
-        nome: cliente.nome,
+        nome: cliente.nome || "",
         cpf: this.formatarCpf(cliente.cpf),
         telefone: this.formatarTelefone(cliente.telefone),
-        email: cliente.email,
+        email: cliente.email || "",
+        genero: cliente.genero || "",
+        endereco: {
+          cep: this.formatarCep(cliente.endereco?.cep),
+          rua: cliente.endereco?.rua || "",
+          numero: cliente.endereco?.numero || "",
+          bairro: cliente.endereco?.bairro || "",
+          cidade: cliente.endereco?.cidade || "",
+          estado: cliente.endereco?.estado || "",
+        },
       };
 
       this.dialogCadastro = true;
@@ -428,8 +639,7 @@ export default {
     },
 
     async salvarCliente() {
-      const resultado =
-          await this.$refs.formCliente.validate();
+      const resultado = await this.$refs.formCliente.validate();
 
       if (!resultado.valid) {
         this.exibirMensagem(
@@ -439,58 +649,58 @@ export default {
         return;
       }
 
-      if (this.cpfJaCadastrado(this.form.cpf)) {
-        this.exibirMensagem(
-            "Já existe um cliente cadastrado com este CPF.",
-            "error"
-        );
-        return;
-      }
-
-      if (this.emailJaCadastrado(this.form.email)) {
-        this.exibirMensagem(
-            "Já existe um cliente cadastrado com este e-mail.",
-            "error"
-        );
-        return;
-      }
-
-      const cliente = {
-        id: this.form.id,
+      const clienteRequest = {
         nome: String(this.form.nome).trim(),
         cpf: this.removerMascara(this.form.cpf),
-        telefone: this.removerMascara(
-            this.form.telefone
-        ),
+        telefone: this.removerMascara(this.form.telefone),
         email: this.normalizarEmail(this.form.email),
+        genero: this.form.genero,
+        endereco: {
+          cep: this.removerMascara(this.form.endereco.cep),
+          rua: String(this.form.endereco.rua).trim(),
+          numero: String(this.form.endereco.numero).trim(),
+          bairro: String(this.form.endereco.bairro).trim(),
+          cidade: String(this.form.endereco.cidade).trim(),
+          estado: this.normalizarEstado(
+              this.form.endereco.estado
+          ),
+        },
       };
 
-      if (this.clienteEmEdicao) {
-        const indice = this.clientes.findIndex(
-            (item) => item.id === cliente.id
-        );
+      this.salvando = true;
 
-        if (indice !== -1) {
-          this.clientes[indice] = cliente;
+      try {
+        if (this.clienteEmEdicao) {
+          await clienteService.atualizar(
+              this.form.id,
+              clienteRequest
+          );
+
+          this.exibirMensagem(
+              "Cliente atualizado com sucesso.",
+              "success"
+          );
+        } else {
+          await clienteService.salvar(clienteRequest);
+
+          this.exibirMensagem(
+              "Cliente cadastrado com sucesso.",
+              "success"
+          );
         }
 
-        this.exibirMensagem(
-            "Cliente atualizado com sucesso.",
-            "success"
+        this.fecharCadastro();
+        await this.carregarClientes();
+      } catch (erro) {
+        this.exibirErro(
+            erro,
+            this.clienteEmEdicao
+                ? "Não foi possível atualizar o cliente."
+                : "Não foi possível cadastrar o cliente."
         );
-      } else {
-        this.clientes.push({
-          ...cliente,
-          id: Date.now(),
-        });
-
-        this.exibirMensagem(
-            "Cliente cadastrado com sucesso.",
-            "success"
-        );
+      } finally {
+        this.salvando = false;
       }
-
-      this.fecharCadastro();
     },
 
     confirmarExclusao(cliente) {
@@ -503,22 +713,32 @@ export default {
       this.clienteSelecionado = null;
     },
 
-    excluirCliente() {
-      if (!this.clienteSelecionado) {
+    async excluirCliente() {
+      if (!this.clienteSelecionado?.id) {
         return;
       }
 
-      this.clientes = this.clientes.filter(
-          (cliente) =>
-              cliente.id !== this.clienteSelecionado.id
-      );
+      try {
+        await clienteService.excluir(
+            this.clienteSelecionado.id
+        );
 
-      this.fecharExclusao();
+        this.fecharExclusao();
 
-      this.exibirMensagem(
-          "Cliente excluído com sucesso.",
-          "success"
-      );
+        this.exibirMensagem(
+            "Cliente excluído com sucesso.",
+            "success"
+        );
+
+        await this.carregarClientes();
+      } catch (erro) {
+        this.fecharExclusao();
+
+        this.exibirErro(
+            erro,
+            "Não foi possível excluir o cliente."
+        );
+      }
     },
 
     limparFormulario() {
@@ -528,6 +748,15 @@ export default {
         cpf: "",
         telefone: "",
         email: "",
+        genero: "",
+        endereco: {
+          cep: "",
+          rua: "",
+          numero: "",
+          bairro: "",
+          cidade: "",
+          estado: "",
+        },
       };
     },
 
@@ -551,7 +780,6 @@ export default {
         return false;
       }
 
-      // Bloqueia CPFs com todos os números iguais
       if (/^(\d)\1{10}$/.test(cpf)) {
         return false;
       }
@@ -640,6 +868,16 @@ export default {
           .replace(/(\d{5})(\d)/, "$1-$2");
     },
 
+    formatarCep(valor) {
+      const numeros = this.removerMascara(valor)
+          .slice(0, 8);
+
+      return numeros.replace(
+          /(\d{5})(\d)/,
+          "$1-$2"
+      );
+    },
+
     removerMascara(valor) {
       return String(valor || "").replace(/\D/g, "");
     },
@@ -650,10 +888,112 @@ export default {
           .toLowerCase();
     },
 
+    normalizarEstado(valor) {
+      return String(valor || "")
+          .replace(/[^A-Za-z]/g, "")
+          .slice(0, 2)
+          .toUpperCase();
+    },
+
+    obterDescricaoGenero(valor) {
+      const genero = this.generos.find(
+          (item) => item.valor === valor
+      );
+
+      return genero?.descricao || "Não informado";
+    },
+
     exibirMensagem(mensagem, cor = "success") {
       this.snackbar.mensagem = mensagem;
       this.snackbar.cor = cor;
       this.snackbar.aberto = true;
+    },
+    async carregarClientes() {
+      this.carregando = true;
+
+      try {
+        const resposta = await clienteService.listar();
+        this.clientes = resposta.data;
+      } catch (erro) {
+        this.exibirErro(
+            erro,
+            "Não foi possível carregar os clientes."
+        );
+      } finally {
+        this.carregando = false;
+      }
+    },
+    obterMensagemErro(erro, mensagemPadrao) {
+      const dados = erro?.response?.data;
+
+      if (typeof dados === "string" && dados.trim()) {
+        return dados;
+      }
+
+      if (dados?.message) {
+        return dados.message;
+      }
+
+      if (dados?.mensagem) {
+        return dados.mensagem;
+      }
+
+      if (dados?.detail) {
+        return dados.detail;
+      }
+
+      if (dados?.erro) {
+        return dados.erro;
+      }
+
+      if (dados?.error) {
+        return dados.error;
+      }
+
+      if (Array.isArray(dados?.errors) && dados.errors.length > 0) {
+        return dados.errors
+            .map((item) => item.defaultMessage || item.message || item)
+            .join("\n");
+      }
+
+      if (dados?.campos && typeof dados.campos === "object") {
+        return Object.values(dados.campos).join("\n");
+      }
+
+      if (erro?.code === "ERR_NETWORK") {
+        return "Não foi possível conectar ao servidor. Verifique se o backend está em execução.";
+      }
+
+      if (erro?.response?.status === 401) {
+        return "Você não possui autorização para realizar esta operação.";
+      }
+
+      if (erro?.response?.status === 403) {
+        return "Você não possui permissão para realizar esta operação.";
+      }
+
+      if (erro?.response?.status === 404) {
+        return "O registro solicitado não foi encontrado.";
+      }
+
+      if (erro?.response?.status === 500) {
+        return "Ocorreu um erro interno no servidor.";
+      }
+
+      return mensagemPadrao || "Ocorreu um erro inesperado.";
+    },
+    exibirErro(erro, mensagemPadrao) {
+      this.dialogErro.mensagem = this.obterMensagemErro(
+          erro,
+          mensagemPadrao
+      );
+
+      this.dialogErro.aberto = true;
+    },
+
+    fecharDialogErro() {
+      this.dialogErro.aberto = false;
+      this.dialogErro.mensagem = "";
     },
   },
 };

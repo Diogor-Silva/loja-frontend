@@ -24,6 +24,7 @@
             <v-autocomplete
                 v-model="clienteSelecionado"
                 :items="clientes"
+                :loading="carregandoClientes"
                 item-title="nome"
                 item-value="id"
                 label="Selecione o cliente"
@@ -33,7 +34,15 @@
                 clearable
                 return-object
                 hide-details
-            />
+                no-data-text="Nenhum cliente encontrado"
+            >
+              <template #item="{ props, item }">
+                <v-list-item
+                    v-bind="props"
+                    :subtitle="formatarCpf(item.raw.cpf)"
+                />
+              </template>
+            </v-autocomplete>
           </v-card-text>
         </v-card>
 
@@ -50,6 +59,7 @@
                 <v-autocomplete
                     v-model="produtoSelecionado"
                     :items="produtosDisponiveis"
+                    :loading="carregandoProdutos"
                     item-title="nome"
                     item-value="id"
                     label="Produto"
@@ -59,13 +69,15 @@
                     return-object
                     clearable
                     hide-details
+                    no-data-text="Nenhum produto disponível"
                 >
                   <template #item="{ props, item }">
                     <v-list-item
                         v-bind="props"
                         :subtitle="
-            `${formatarMoeda(item.raw.preco)} • Estoque: ${item.raw.quantidadeEstoque}`
-          "
+                        `${formatarMoeda(item.raw.preco)}
+                        • Estoque: ${item.raw.quantidadeEstoque}`
+                      "
                     />
                   </template>
                 </v-autocomplete>
@@ -176,7 +188,9 @@
                 prefix="R$"
                 variant="outlined"
                 inputmode="decimal"
-                @update:model-value="valorPago = formatarCampoPreco($event)"
+                @update:model-value="
+                valorPago = formatarCampoPreco($event)
+              "
             />
 
             <div
@@ -197,7 +211,8 @@
                 size="large"
                 block
                 prepend-icon="mdi-check-circle-outline"
-                :disabled="!podeFinalizar"
+                :disabled="!podeFinalizar || finalizandoVenda"
+                :loading="finalizandoVenda"
                 @click="finalizarVenda"
             >
               Finalizar venda
@@ -211,7 +226,7 @@
         v-model="snackbarAberto"
         :color="snackbarCor"
         location="top right"
-        :timeout="3500"
+        :timeout="4000"
     >
       {{ snackbarMensagem }}
 
@@ -228,6 +243,10 @@
 </template>
 
 <script>
+import clienteService from "@/services/clienteService";
+import produtoService from "@/services/produtoService";
+import caixaService from "@/services/caixaService";
+
 export default {
   name: "CaixaView",
 
@@ -238,6 +257,10 @@ export default {
       quantidade: 1,
       formaPagamento: null,
       valorPago: "",
+
+      carregandoClientes: false,
+      carregandoProdutos: false,
+      finalizandoVenda: false,
 
       snackbarAberto: false,
       snackbarMensagem: "",
@@ -262,43 +285,8 @@ export default {
         },
       ],
 
-      clientes: [
-        {
-          id: 1,
-          nome: "Maria Oliveira",
-          cpf: "52998224725",
-        },
-        {
-          id: 2,
-          nome: "João da Silva",
-          cpf: "11144477735",
-        },
-      ],
-
-      produtos: [
-        {
-          id: 1,
-          nome: "Memória RAM Kingston Fury 16GB",
-          codigoBarra: "7891234567890",
-          preco: 279.9,
-          quantidadeEstoque: 12,
-        },
-        {
-          id: 2,
-          nome: "Mouse Gamer",
-          codigoBarra: "7899876543210",
-          preco: 149.9,
-          quantidadeEstoque: 3,
-        },
-        {
-          id: 3,
-          nome: "Teclado Mecânico",
-          codigoBarra: "7894561237890",
-          preco: 329.9,
-          quantidadeEstoque: 0,
-        },
-      ],
-
+      clientes: [],
+      produtos: [],
       itensVenda: [],
 
       headersItens: [
@@ -330,10 +318,16 @@ export default {
     };
   },
 
+  mounted() {
+    this.carregarDados();
+  },
+
   computed: {
     produtosDisponiveis() {
       return this.produtos.filter(
-          (produto) => produto.quantidadeEstoque > 0
+          (produto) =>
+              Number(produto.quantidadeEstoque) > 0 &&
+              produto.ativo !== false
       );
     },
 
@@ -356,8 +350,8 @@ export default {
         return 0;
       }
 
-      const pago = this.converterValor(this.valorPago);
-      const diferenca = pago - this.valorTotal;
+      const valorPago = this.converterValor(this.valorPago);
+      const diferenca = valorPago - this.valorTotal;
 
       return diferenca > 0 ? diferenca : 0;
     },
@@ -375,14 +369,67 @@ export default {
         return false;
       }
 
-      return !(
+      if (
           this.formaPagamento === "DINHEIRO" &&
           this.converterValor(this.valorPago) < this.valorTotal
-      );
+      ) {
+        return false;
+      }
+
+      return true;
     },
   },
 
   methods: {
+    async carregarDados() {
+      await Promise.all([
+        this.carregarClientes(),
+        this.carregarProdutos(),
+      ]);
+    },
+
+    async carregarClientes() {
+      this.carregandoClientes = true;
+
+      try {
+        const resposta = await clienteService.listar();
+        this.clientes = resposta.data;
+      } catch (erro) {
+        console.error("Erro ao carregar clientes:", erro);
+
+        this.exibirMensagem(
+            this.obterMensagemErro(
+                erro,
+                "Não foi possível carregar os clientes."
+            ),
+            "error"
+        );
+      } finally {
+        this.carregandoClientes = false;
+      }
+    },
+
+    async carregarProdutos() {
+      this.carregandoProdutos = true;
+
+      try {
+        const resposta = await produtoService.listar();
+        this.produtos = resposta.data;
+      } catch (erro) {
+        console.error("Erro ao carregar produtos:", erro);
+
+        this.exibirMensagem(
+            this.obterMensagemErro(
+                erro,
+                "Não foi possível carregar os produtos."
+            ),
+            "error"
+        );
+      } finally {
+        this.carregandoProdutos = false;
+      }
+    },
+
     adicionarProduto() {
       if (!this.produtoSelecionado) {
         this.exibirMensagem(
@@ -413,7 +460,7 @@ export default {
 
       if (
           quantidadeAtual + quantidade >
-          this.produtoSelecionado.quantidadeEstoque
+          Number(this.produtoSelecionado.quantidadeEstoque)
       ) {
         this.exibirMensagem(
             "A quantidade informada é maior que o estoque disponível.",
@@ -432,9 +479,12 @@ export default {
           produtoId: this.produtoSelecionado.id,
           nome: this.produtoSelecionado.nome,
           quantidade,
-          valorUnitario: this.produtoSelecionado.preco,
+          valorUnitario: Number(
+              this.produtoSelecionado.preco
+          ),
           subtotal:
-              quantidade * this.produtoSelecionado.preco,
+              quantidade *
+              Number(this.produtoSelecionado.preco),
         });
       }
 
@@ -448,7 +498,7 @@ export default {
       );
     },
 
-    finalizarVenda() {
+    async finalizarVenda() {
       if (!this.podeFinalizar) {
         this.exibirMensagem(
             "Preencha os dados necessários para finalizar a venda.",
@@ -457,12 +507,45 @@ export default {
         return;
       }
 
-      this.exibirMensagem(
-          "Venda finalizada com sucesso.",
-          "success"
-      );
+      const vendaRequest = {
+        clienteId: this.clienteSelecionado.id,
+        formaPagamento: this.formaPagamento,
+        valorPago:
+            this.formaPagamento === "DINHEIRO"
+                ? this.converterValor(this.valorPago)
+                : null,
+        itens: this.itensVenda.map((item) => ({
+          produtoId: item.produtoId,
+          quantidade: item.quantidade,
+        })),
+      };
 
-      this.limparVenda();
+      this.finalizandoVenda = true;
+
+      try {
+        await caixaService.finalizarVenda(vendaRequest);
+
+        this.exibirMensagem(
+            "Venda finalizada com sucesso.",
+            "success"
+        );
+
+        this.limparVenda();
+
+        await this.carregarProdutos();
+      } catch (erro) {
+        console.error("Erro ao finalizar a venda:", erro);
+
+        this.exibirMensagem(
+            this.obterMensagemErro(
+                erro,
+                "Não foi possível finalizar a venda."
+            ),
+            "error"
+        );
+      } finally {
+        this.finalizandoVenda = false;
+      }
     },
 
     limparVenda() {
@@ -496,10 +579,65 @@ export default {
       });
     },
 
+    formatarCpf(cpf) {
+      const numeros = String(cpf || "").replace(/\D/g, "");
+
+      if (numeros.length !== 11) {
+        return cpf || "";
+      }
+
+      return numeros.replace(
+          /(\d{3})(\d{3})(\d{3})(\d{2})/,
+          "$1.$2.$3-$4"
+      );
+    },
+
     exibirMensagem(mensagem, cor = "success") {
       this.snackbarMensagem = mensagem;
       this.snackbarCor = cor;
       this.snackbarAberto = true;
+    },
+
+    obterMensagemErro(erro, mensagemPadrao) {
+      const dados = erro?.response?.data;
+
+      if (typeof dados === "string" && dados.trim()) {
+        return dados;
+      }
+
+      if (dados?.mensagem) {
+        return dados.mensagem;
+      }
+
+      if (dados?.message) {
+        return dados.message;
+      }
+
+      if (dados?.detail) {
+        return dados.detail;
+      }
+
+      if (dados?.erro) {
+        return dados.erro;
+      }
+
+      if (dados?.error) {
+        return dados.error;
+      }
+
+      if (erro?.code === "ERR_NETWORK") {
+        return "Não foi possível conectar ao servidor. Verifique se o backend está em execução.";
+      }
+
+      if (erro?.response?.status === 401) {
+        return "Você precisa estar autenticado para finalizar a venda.";
+      }
+
+      if (erro?.response?.status === 403) {
+        return "Você não possui permissão para finalizar a venda.";
+      }
+
+      return mensagemPadrao;
     },
   },
 };
